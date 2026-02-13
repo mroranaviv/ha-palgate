@@ -1,6 +1,6 @@
 {
-    "name": "Palgate",
-    "hacs": "1.6.0",
-    "homeassistant": "2022.8.0",
-    "render_readme": true
+  "name": "Palgate Oran",
+  "hacs": "1.6.0",
+  "homeassistant": "2022.8.0",
+  "render_readme": true
 }

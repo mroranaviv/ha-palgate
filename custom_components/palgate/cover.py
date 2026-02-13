@@ -26,6 +26,9 @@ async def async_setup_entry(
 ) -> None:
     """Add Palgate entities from a config_entry."""
 
+    # hub device identifier – all covers will reference this via_device
+    HUB_IDENT = (PALGATE_DOMAIN, entry.data[CONF_PHONE_NUMBER])
+
     COVERS: tuple[CoverEntityDescription, ...] = (
         CoverEntityDescription(
             key=entry.data[CONF_DEVICE_ID],
@@ -48,7 +51,7 @@ async def async_setup_entry(
     )
         
     async_add_entities(
-        PalgateCover(api, description) for description in COVERS
+        PalgateCover(api, description, hub_ident=HUB_IDENT) for description in COVERS
     )
 
 
@@ -59,6 +62,7 @@ class PalgateCover(CoverEntity):
         self,
         api: PalgateApiClient,
         description: CoverEntityDescription,
+        hub_ident,
     ) -> None:
         """Initialize."""
 
@@ -67,10 +71,11 @@ class PalgateCover(CoverEntity):
 
         self._attr_unique_id = f"{description.key}"
         self._attr_device_info = DeviceInfo(
-            identifiers={(PALGATE_DOMAIN, "palgate")},
+            identifiers={(PALGATE_DOMAIN, description.key)},
             name="Palgate",
             model="Palgate",
             manufacturer="Palgate",
+            via_device=hub_ident,
         )
 
     @property
