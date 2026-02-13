@@ -4,7 +4,7 @@ from logging import Logger, getLogger
 
 LOGGER: Logger = getLogger(__package__)
 
-DOMAIN = "palgate"
+DOMAIN = "palgateoran"
 PLATFORMS = ["cover"]
 
 CONF_PHONE_NUMBER = "phone_number"
