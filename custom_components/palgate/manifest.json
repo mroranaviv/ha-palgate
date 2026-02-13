@@ -1,6 +1,6 @@
 {
-  "domain": "palgate",
-  "name": "Palgate",
+  "domain": "palgateoran",
+  "name": "Palgateora",
   "codeowners": ["@ShonP40"],
   "config_flow": true,
   "documentation": "https://github.com/ShonP40/ha-palgate",
