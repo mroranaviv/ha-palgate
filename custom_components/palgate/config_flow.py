@@ -29,7 +29,8 @@ _LOGGER = logging.getLogger(__name__)
 class PollenvarselFlowHandler(config_entries.ConfigFlow, domain=PALGATE_DOMAIN):
     """Config flow for Palgate."""
 
-    VERSION = 3
+    # bumped because we are changing data format
+    VERSION = 4
 
     def __init__(self):
 
@@ -44,11 +45,41 @@ class PollenvarselFlowHandler(config_entries.ConfigFlow, domain=PALGATE_DOMAIN):
         if user_input is not None:
 
             device_id: str = user_input[CONF_DEVICE_ID]
+            phone: str = user_input[CONF_PHONE_NUMBER]
 
-            if await self._async_existing_devices(device_id):
-                return self.async_abort(reason="already_configured")
+            # if there is already an entry for this phone number, append
+            # the device ID to it instead of creating a new config entry.
+            existing = next(
+                (
+                    e
+                    for e in self._async_current_entries()
+                    if e.data.get(CONF_PHONE_NUMBER) == phone
+                ),
+                None,
+            )
 
-            await self.async_set_unique_id(device_id)
+            if existing:
+                # make sure the device isn't already known
+                ids = existing.data.get(CONF_DEVICE_IDS) or [
+                    existing.data.get(CONF_DEVICE_ID)
+                ]
+                if device_id in ids:
+                    return self.async_abort(reason="already_configured")
+
+                ids.append(device_id)
+                new_data = dict(existing.data)
+                new_data[CONF_DEVICE_IDS] = ids
+                # keep backwards compatibility by also storing the first id
+                new_data[CONF_DEVICE_ID] = ids[0]
+
+                self.hass.config_entries.async_update_entry(existing, data=new_data)
+                # reload so entities are created immediately
+                await self.hass.config_entries.async_reload(existing.entry_id)
+                # abort the flow: we added the gate to an existing phone entry
+                return self.async_abort(reason="device_added")
+
+            # no existing entry for this phone, proceed normally
+            await self.async_set_unique_id(phone)
             self._abort_if_unique_id_configured()
 
             self.user_input = user_input
@@ -67,11 +98,6 @@ class PollenvarselFlowHandler(config_entries.ConfigFlow, domain=PALGATE_DOMAIN):
                         user_input[CONF_PHONE_NUMBER]][1]
 
             return await self.async_step_complete_new_entry()
-            
-            return self.async_create_entry(
-                title=device_id.title(),
-                data=user_input,
-            )
 
         if self._task:              # Are we creating a new Linked Device?
 
@@ -114,8 +140,11 @@ class PollenvarselFlowHandler(config_entries.ConfigFlow, domain=PALGATE_DOMAIN):
         self.user_input[CONF_TOKEN] = self._linked_token
         self.user_input[CONF_TOKEN_TYPE] = self._linked_token_type
 
+        # when first creating an entry we store a list of devices
+        self.user_input[CONF_DEVICE_IDS] = [self.user_input[CONF_DEVICE_ID]]
+
         return self.async_create_entry(
-            title=self.user_input[CONF_DEVICE_ID].title(),
+            title=self.user_input[CONF_PHONE_NUMBER],
             data=self.user_input,
         )
 
@@ -201,9 +230,18 @@ class PollenvarselFlowHandler(config_entries.ConfigFlow, domain=PALGATE_DOMAIN):
                     errors={"base":"cant_reconfigure_device_id"},
                 )
 
+            # we only allow changing the first device id in the list
+            data_updates = dict(user_input)
+            # preserve existing list
+            orig_ids = self.entry.data.get(CONF_DEVICE_IDS) or [
+                self.entry.data.get(CONF_DEVICE_ID)
+            ]
+            orig_ids[0] = data_updates[CONF_DEVICE_ID]
+            data_updates[CONF_DEVICE_IDS] = orig_ids
+
             return self.async_update_reload_and_abort(
                 self._get_reconfigure_entry(),
-                data_updates=user_input,
+                data_updates=data_updates,
             )
         self.entry = self._get_reconfigure_entry()
         self.device_id = self.entry.data[CONF_DEVICE_ID]
@@ -217,18 +255,26 @@ class PollenvarselFlowHandler(config_entries.ConfigFlow, domain=PALGATE_DOMAIN):
     async def _async_existing_devices(self, area: str) -> bool:
         """Find existing devices."""
 
-        existing_devices = [
-            f"{entry.data.get(CONF_DEVICE_ID)}"
-            for entry in self._async_current_entries()
-        ]
+        # search all known ids in every entry (migrated or new format)
+        existing_devices: list[str] = []
+        for entry in self._async_current_entries():
+            ids = entry.data.get(CONF_DEVICE_IDS)
+            if ids:
+                existing_devices.extend(ids)
+            else:
+                existing_devices.append(entry.data.get(CONF_DEVICE_ID))
 
         return area in existing_devices
 
     def _create_schema(self) -> vol.Schema:
 
-        def_device_id  = self.entry.data[CONF_DEVICE_ID] \
-            if self.source == config_entries.SOURCE_RECONFIGURE \
-            else None
+        def_device_id  = None
+        if self.source == config_entries.SOURCE_RECONFIGURE:
+            # when editing, show the current single device being edited
+            ids = self.entry.data.get(CONF_DEVICE_IDS) or [
+                self.entry.data.get(CONF_DEVICE_ID)
+            ]
+            def_device_id = ids[0]
         def_token      = self.entry.data[CONF_TOKEN] \
             if self.source == config_entries.SOURCE_RECONFIGURE \
             else None

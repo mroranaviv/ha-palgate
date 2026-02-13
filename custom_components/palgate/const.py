@@ -10,6 +10,9 @@ PLATFORMS = ["cover"]
 CONF_PHONE_NUMBER = "phone_number"
 CONF_TOKEN_TYPE = "token_type"
 
+# for new multi-device entries
+CONF_DEVICE_IDS = "device_ids"
+
 CONF_ADVANCED = "advanced_options"
 CONF_SECONDS_TO_OPEN = "seconds_to_open"
 CONF_SECONDS_OPEN = "seconds_open"
